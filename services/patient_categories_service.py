@@ -264,12 +264,12 @@ def save_patient_data(data):
                  created_at=current_date,
                  updated_at=current_date
             )
-           stmt = stmt.on_duplicate_key_update(
+            stmt = stmt.on_duplicate_key_update(
                  location=location,  # update to latest location if duplicate patient_id
                  total=PatientLocationCount.total + count,
                  updated_at=current_date
-           )
-           db.session.execute(stmt)
+            )
+            db.session.execute(stmt)
 
 
         # Commit all upserts at once
