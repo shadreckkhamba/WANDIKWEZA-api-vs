@@ -257,17 +257,17 @@ def save_patient_data(data):
             count = int(item.get("total") or item.get("count") or 1)
 
             stmt = mysql_insert(PatientLocationCount).values(
-                 patient_id=patient_id,
-                 location=location,
-                 time_stamp=time_stamp,
-                 total=count,
-                 created_at=current_date,
-                 updated_at=current_date
+                patient_id=patient_id,
+                location=location,
+                time_stamp=time_stamp,
+                total=count,
+                created_at=current_date,
+                updated_at=current_date
             )
             stmt = stmt.on_duplicate_key_update(
-                 location=location,  # update to latest location if duplicate patient_id
-                 total=PatientLocationCount.total + count,
-                 updated_at=current_date
+                total=count,               
+                time_stamp=time_stamp,  
+                updated_at=current_date
             )
             db.session.execute(stmt)
 
