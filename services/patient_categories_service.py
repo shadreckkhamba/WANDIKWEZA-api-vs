@@ -232,15 +232,14 @@ def save_patient_data(data):
                     updated_at=current_date
             )
             stmt = stmt.on_duplicate_key_update(
-                 count=1,
-                 updated_at=current_date
+                # Keep the same count or increment if needed
+                count=PatientRefundCount.count,  # keeps the current value
+                updated_at=current_date
             )
             db.session.execute(stmt)
 
-        # After loop: compute global total once
-        total = db.session.query(func.count()).select_from(PatientRefundCount).scalar()
-
-        # Update all rows to share the same total
+        # After loop, compute global total once
+        total = db.session.query(func.count(PatientRefundCount.patient_id.distinct())).scalar()
         db.session.query(PatientRefundCount).update({
             PatientRefundCount.total: total,
             PatientRefundCount.updated_at: current_date
