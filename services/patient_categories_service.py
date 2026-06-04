@@ -8,7 +8,6 @@ from models.patient_refund_count_model import PatientRefundCount
 from sqlalchemy.exc import IntegrityError
 from models.patient_location_count_model import PatientLocationCount
 from sqlalchemy.dialects.mysql import insert
-from sqlalchemy import func
 
 def upsert_patient_age_category(patient_id, category, time_stamp, total):
     stmt = insert(PatientAgeCategory).values(
@@ -24,32 +23,41 @@ def upsert_patient_age_category(patient_id, category, time_stamp, total):
     )
     db.session.execute(stmt)
     db.session.commit()
-
-def upsert_patient_gender_count(gender, time_stamp, total):
+    
+# Insert or Update gender counts
+def upsert_patient_gender_count(patient_id, gender, time_stamp, total):
     try:
-        obj = db.session.query(PatientGenderCount).filter_by(
+        obj = PatientGenderCount(
+            patient_id=patient_id,
             gender=gender,
-            time_stamp=time_stamp
-        ).first()
-
-        if obj:
-            obj.total = total
-            obj.updated_at = datetime.utcnow()
-        else:
-            obj = PatientGenderCount(
-                patient_id=None, 
+            time_stamp=time_stamp,
+            total=total,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+        db.session.add(obj)
+        db.session.flush()
+    except IntegrityError as e:
+        db.session.rollback()
+        try:
+            # Record exists, update instead
+            obj = db.session.query(PatientGenderCount).filter_by(
+                patient_id=patient_id,
                 gender=gender,
-                time_stamp=time_stamp,
-                total=total,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow()
-            )
-            db.session.add(obj)
-
-        db.session.commit()
+                time_stamp=time_stamp
+            ).first()
+            if obj:
+                obj.total = total
+                obj.updated_at = datetime.utcnow()
+                db.session.flush()
+        except Exception as ex:
+            logger.exception(f"Retry update failed: {ex}")
+            db.session.rollback()
+            raise
     except Exception as e:
         logger.exception(f"Failed to upsert gender count: {e}")
         db.session.rollback()
+        raise
 
 # Insert or Update refund counts
 def upsert_patient_refund_count(patient_id, refund_timestamp, count, total):
@@ -120,6 +128,7 @@ def upsert_patient_location_count(patient_id, location, time_stamp, total):
             obj.updated_at = datetime.utcnow()
             db.session.flush()
         else:
+            #This theoretically should not happen but log or raise if needed
             raise
     except Exception as e:
         logger.exception(f"Failed to upsert patient location count: {e}")
@@ -134,7 +143,7 @@ def parse_period_date(date_str):
         return date_parser.parse(date_str)
     except (ValueError, TypeError):
         return None
-
+    
 def update_last_update_status(current_date):
     # Try to get the singleton row
     last_update = db.session.query(LastUpdateStatus).get(1)  # get by primary key
@@ -148,10 +157,10 @@ def update_last_update_status(current_date):
         last_update.last_updated = current_date
 
     db.session.commit()
-
+    
 from sqlalchemy.dialects.mysql import insert as mysql_insert
 
-def save_patient_data(data):
+def save_patient_data_upsert(data):
     """
     Save patient data with upserts, aggregating totals on duplicates.
     """
@@ -186,66 +195,52 @@ def save_patient_data(data):
                 db.session.execute(stmt)
 
         # --- Gender Counts ---
-        # --- Gender Counts ---
-        from collections import Counter
-
-        # Aggregate total visits per gender first
-        monthly_totals = Counter()
-        # --- Gender Counts ---
         for item in gender_counts:
-            raw_date = item.get("time_stamp")
+            raw_date = item.get("time_stamp") or item.get("period_date")
             time_stamp = parse_period_date(raw_date)
-            patient_id = item.get("patient_id")
             gender = item.get("gender")
-            total = int(item.get("total") or 1)
+            patient_id = item.get("patient_id") or item.get("id")
+            count = int(item.get("total") or item.get("count") or 1)
 
-            if time_stamp and patient_id and gender:
+            if time_stamp and gender is not None and patient_id is not None:
                 stmt = mysql_insert(PatientGenderCount).values(
                     patient_id=patient_id,
                     gender=gender,
                     time_stamp=time_stamp,
-                    total=total,
+                    total=count,
                     created_at=current_date,
                     updated_at=current_date
-                ).on_duplicate_key_update(
-                    total=PatientGenderCount.total + total,
+                )
+                stmt = stmt.on_duplicate_key_update(
+                    total=PatientGenderCount.total + count,
                     updated_at=current_date
                 )
-
                 db.session.execute(stmt)
-
-
 
         # --- Refunded Patients ---
         for item in refunded_patients:
             raw_date = item.get("refund_timestamp") or item.get("time_stamp") or item.get("period_date")
             refund_timestamp = parse_period_date(raw_date)
             patient_id = item.get("patient_id") or item.get("id")
+            count = int(item.get("count") or 1)
 
             if refund_timestamp and patient_id is not None:
                 stmt = mysql_insert(PatientRefundCount).values(
                     patient_id=patient_id,
                     refund_timestamp=refund_timestamp,
-                    count=1,
-                    total=0,
+                    count=count,
+                    total=count,
                     created_at=current_date,
                     updated_at=current_date
-            )
-            stmt = stmt.on_duplicate_key_update(
-                # Keep the same count or increment if needed
-                count=PatientRefundCount.count,  # keeps the current value
-                updated_at=current_date
-            )
-            db.session.execute(stmt)
-
-        # After loop, compute global total once
-        total = db.session.query(func.count(PatientRefundCount.patient_id.distinct())).scalar()
-        db.session.query(PatientRefundCount).update({
-            PatientRefundCount.total: total,
-            PatientRefundCount.updated_at: current_date
-        })
-
-        db.session.commit()
+                )
+                stmt = stmt.on_duplicate_key_update(
+                    # Idempotent upsert: if the source re-sends the same refund
+                    # record, do not keep incrementing counts.
+                    total=stmt.inserted.total,
+                    count=stmt.inserted.count,
+                    updated_at=current_date
+                )
+                db.session.execute(stmt)
 
         # --- Location Counts ---
         for item in location_counts:
@@ -255,28 +250,27 @@ def save_patient_data(data):
             patient_id = item.get("patient_id") or item.get("id")
             count = int(item.get("total") or item.get("count") or 1)
 
-            stmt = mysql_insert(PatientLocationCount).values(
-                patient_id=patient_id,
-                location=location,
-                time_stamp=time_stamp,
-                total=count,
-                created_at=current_date,
-                updated_at=current_date
-            )
-            stmt = stmt.on_duplicate_key_update(
-                total=count,               
-                time_stamp=time_stamp,  
-                updated_at=current_date
-            )
-            db.session.execute(stmt)
-
+            if time_stamp and location is not None and patient_id is not None:
+                stmt = mysql_insert(PatientLocationCount).values(
+                    patient_id=patient_id,
+                    location=location,
+                    time_stamp=time_stamp,
+                    total=count,
+                    created_at=current_date,
+                    updated_at=current_date
+                )
+                stmt = stmt.on_duplicate_key_update(
+                    total=PatientLocationCount.total + count,
+                    updated_at=current_date
+                )
+                db.session.execute(stmt)
 
         # Commit all upserts at once
         db.session.commit()
-        logger.info("All patient data upserted successfully")
+        logger.info("Patient data upserted successfully")
 
-        # Update last_updated timestamp
-        update_last_updated_if_needed()
+        # Dashboard freshness should reflect receipt time, not event timestamps.
+        update_last_update_status(current_date)
 
         return {"message": "Patient data saved successfully"}
 
@@ -284,31 +278,3 @@ def save_patient_data(data):
         logger.exception("Error saving patient data")
         db.session.rollback()
         return {"error": "Internal server error"}
-
-# Update the last updated timestamp
-def update_last_updated_if_needed():
-
-    latest_age = db.session.query(func.max(PatientAgeCategory.created_at)).scalar()
-    latest_gender = db.session.query(func.max(PatientGenderCount.created_at)).scalar()
-    latest_refund = db.session.query(func.max(PatientRefundCount.created_at)).scalar()
-    latest_location = db.session.query(func.max(PatientLocationCount.created_at)).scalar()
-
-    latest_times = [t for t in [latest_age, latest_gender, latest_refund, latest_location] if t]
-
-    if not latest_times:
-        logger.info("No data in any table, skipping last update status.")
-        return
-
-    most_recent = max(latest_times)
-
-    record = db.session.query(LastUpdateStatus).first()
-    if not record:
-        db.session.add(LastUpdateStatus(last_updated=most_recent))
-        logger.info(f"Created new last_update_status with {most_recent}")
-    elif most_recent > record.last_updated:
-        record.last_updated = most_recent
-        logger.info(f"Updated last_update_status to {most_recent}")
-    else:
-        logger.info(f"No new data detected. last_update_status remains at {record.last_updated}")
-
-    db.session.commit()

@@ -11,3 +11,7 @@ class PatientRefundCount(db.Model):
     total = db.Column(db.Integer, nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('patient_id', 'refund_timestamp', name='uq_patient_refund_count'),
+    )

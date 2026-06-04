@@ -1,7 +1,34 @@
-# Python virtual environment
-venv/
+.idea/
+.vscode/
+.venv*/
+venv*/
+.venv
+.venv/
+.venv/*
 __pycache__/
-
-# SSH keys
-*.pub
-*.pem
+dist/
+.coverage*
+htmlcov/
+.tox/
+docs/_build/
+config/*
+!config/application.config.example
+!config/application.py.example
+migrations
+migrations*/
+migrations/*
+migrations/
+config/application.py
+config/*
+!config/*.example
+todo
+data
+functions
+playground
+logs
+logs/*
+# ignore utility and migration files
+cleanup_calculated_fields.py
+production_migration.py
+metrics_sql.sql
+scripts/seed_patient_stay_times.py
