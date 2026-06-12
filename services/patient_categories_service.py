@@ -19,7 +19,6 @@ def upsert_patient_age_category(patient_id, category, time_stamp, total):
         updated_at=datetime.utcnow()
     ).on_duplicate_key_update(
         total=total,
-        updated_at=datetime.utcnow()
     )
     db.session.execute(stmt)
     db.session.commit()
@@ -190,7 +189,6 @@ def save_patient_data_upsert(data):
                 )
                 stmt = stmt.on_duplicate_key_update(
                     total=PatientAgeCategory.total + count,
-                    updated_at=current_date
                 )
                 db.session.execute(stmt)
 
@@ -213,7 +211,6 @@ def save_patient_data_upsert(data):
                 )
                 stmt = stmt.on_duplicate_key_update(
                     total=PatientGenderCount.total + count,
-                    updated_at=current_date
                 )
                 db.session.execute(stmt)
 
@@ -238,7 +235,6 @@ def save_patient_data_upsert(data):
                     # record, do not keep incrementing counts.
                     total=stmt.inserted.total,
                     count=stmt.inserted.count,
-                    updated_at=current_date
                 )
                 db.session.execute(stmt)
 
@@ -261,7 +257,6 @@ def save_patient_data_upsert(data):
                 )
                 stmt = stmt.on_duplicate_key_update(
                     total=PatientLocationCount.total + count,
-                    updated_at=current_date
                 )
                 db.session.execute(stmt)
 

@@ -564,8 +564,7 @@ def get_patient_records():
 
         patients = []
         for r in records:
-            # Format patient_id as identifier (e.g., PT132100)
-            # If patient_id is numeric, format it; otherwise use as-is
+            # Use patient_id as-is (already a proper identifier like PT246991)
             try:
                 numeric_id = int(r.patient_id) if r.patient_id else 0
                 identifier = f"PT{numeric_id}"
@@ -739,7 +738,7 @@ def get_patient_stay_details(date):
         # Format patient details
         patients = []
         for record in records:
-            # Format patient_id as identifier (e.g., PT132100)
+            # Use patient_id as-is (already a proper identifier like PT246991)
             try:
                 numeric_id = int(record.patient_id) if record.patient_id else 0
                 identifier = f"PT{numeric_id}"

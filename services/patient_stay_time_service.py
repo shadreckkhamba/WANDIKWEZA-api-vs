@@ -115,7 +115,7 @@ def save_stay_times(entries: List[Dict], source_default: str = "timemachine") ->
         # Parse and prepare all entries
         parsed_entries = []
         for item in entries:
-            patient_id = item.get("patient_id") or item.get("edim_patient_id")
+            patient_id = item.get("patient_id") or item.get("identifier") or item.get("edim_patient_id")
             arrival_time = parse_datetime_safe(item.get("arrival_time"))
             departure_time = parse_datetime_safe(item.get("departure_time"))  # Can be None for active patients
             push_time = parse_datetime_safe(item.get("push_time")) or current_date
@@ -129,7 +129,14 @@ def save_stay_times(entries: List[Dict], source_default: str = "timemachine") ->
             difference_hours = None
             if departure_time:
                 difference_hours = round((departure_time - arrival_time).total_seconds() / 3600, 2)
-            
+                # Skip records where departure is before arrival (bad source data)
+                if difference_hours < 0:
+                    logger.warning(
+                        f"Skipping patient_id={patient_id}: departure_time ({departure_time}) is before "
+                        f"arrival_time ({arrival_time}), difference_hours={difference_hours}"
+                    )
+                    continue
+
             parsed_entries.append({
                 'patient_id': str(patient_id),
                 'arrival_time': arrival_time,
@@ -172,7 +179,6 @@ def save_stay_times(entries: List[Dict], source_default: str = "timemachine") ->
                 difference_hours=entry['difference_hours'],
                 push_time=entry['push_time'],
                 source=entry['source'],
-                updated_at=current_date,
             )
 
             db.session.execute(stmt)

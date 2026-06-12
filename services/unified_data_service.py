@@ -145,7 +145,10 @@ def unified_data_fetch_loop():
     Runs inside Flask app context.
     """
     global current_interval, no_change_count
-    
+
+    # Wait for the app to fully start before the first fetch
+    time.sleep(FETCH_INTERVAL)
+
     while True:
         try:
             changes_detected = False
