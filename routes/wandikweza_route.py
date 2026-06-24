@@ -143,8 +143,10 @@ def get_daily_average_stay():
             # Skip records without departure time (active patients)
             if record.difference_hours is None or record.departure_time is None:
                 continue
-                
-            date_str = record.push_time.date().strftime("%Y-%m-%d")
+
+            # Use arrival_time to determine the visit date, not push_time
+            # push_time reflects when the record was received, which can differ from the actual visit date
+            date_str = record.arrival_time.date().strftime("%Y-%m-%d")
             if date_str not in daily_data:
                 daily_data[date_str] = []
             daily_data[date_str].append({
@@ -258,7 +260,7 @@ def get_daily_average_stay():
         # Build stay distribution per day
         stay_distribution = {}
         for record in all_records:
-            if record.difference_hours is None or record.push_time is None or record.departure_time is None:
+            if record.difference_hours is None or record.arrival_time is None or record.departure_time is None:
                 continue  # Skip active patients
             try:
                 hours = float(record.difference_hours)
@@ -267,7 +269,8 @@ def get_daily_average_stay():
             if hours < 0 or hours >= STAY_DISTRIBUTION_MAX_HOURS:
                 continue
 
-            date_key = record.push_time.date().strftime("%Y-%m-%d")
+            # Use arrival_time for the date key, consistent with daily_data grouping
+            date_key = record.arrival_time.date().strftime("%Y-%m-%d")
             if date_key not in stay_distribution:
                 stay_distribution[date_key] = [0] * bucket_count
 

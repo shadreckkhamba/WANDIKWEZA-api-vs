@@ -10,6 +10,7 @@ import requests
 import yaml
 from app import create_app
 from email.utils import parsedate_to_datetime
+from services.patient_categories_service import update_last_update_status
 
 # Create a single Flask app instance
 app = create_app()
@@ -125,9 +126,15 @@ def save_stay_times(entries: List[Dict], source_default: str = "timemachine") ->
                 logger.warning(f"Skipping incomplete record (missing patient_id or arrival_time): {item}")
                 continue
 
-            # Calculate difference_hours only if departure_time exists
+            # Calculate difference_hours only if departure_time exists and is valid
             difference_hours = None
             if departure_time:
+                if departure_time < arrival_time:
+                    logger.warning(
+                        f"Skipping invalid record for patient {patient_id}: "
+                        f"departure_time {departure_time} is before arrival_time {arrival_time}"
+                    )
+                    continue
                 difference_hours = round((departure_time - arrival_time).total_seconds() / 3600, 2)
             
             parsed_entries.append({
@@ -147,7 +154,14 @@ def save_stay_times(entries: List[Dict], source_default: str = "timemachine") ->
             return 0
 
         # Process all entries - save raw data only
+        event_timestamps = []
         for entry in parsed_entries:
+            # Collect arrival/departure times for the latest-event timestamp
+            if entry['departure_time']:
+                event_timestamps.append(entry['departure_time'])
+            elif entry['arrival_time']:
+                event_timestamps.append(entry['arrival_time'])
+
             # Calculate difference timedelta for the difference field (only if departure exists)
             difference = None
             if entry['departure_time']:
@@ -162,8 +176,8 @@ def save_stay_times(entries: List[Dict], source_default: str = "timemachine") ->
                 difference_hours=entry['difference_hours'],
                 push_time=entry['push_time'],
                 source=entry['source'],
-                daily_average=None,  # No longer calculated here
-                percent_change=None,  # No longer calculated here
+                daily_average=None,
+                percent_change=None,
                 created_at=current_date,
                 updated_at=current_date,
             ).on_duplicate_key_update(
@@ -175,11 +189,20 @@ def save_stay_times(entries: List[Dict], source_default: str = "timemachine") ->
                 updated_at=current_date,
             )
 
-            db.session.execute(stmt)
-            saved_count += 1
+            result = db.session.execute(stmt)
+            if result.rowcount > 0:
+                saved_count += 1
 
         db.session.commit()
         logger.info(f"Processed {saved_count} stay_time records (inserts + updates).")
+
+        # Update last_update_status only when records actually changed,
+        # using the most recent arrival/departure time from the payload.
+        if saved_count > 0 and event_timestamps:
+            latest_event_ts = max(event_timestamps)
+            update_last_update_status(latest_event_ts)
+            logger.info(f"Last update status set to {latest_event_ts} from stay_time save")
+
         return saved_count
 
     except Exception as e:
