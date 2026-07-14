@@ -5,7 +5,7 @@ class PatientAgeCategory(db.Model):
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     patient_id = db.Column(db.Integer, nullable=False, comment='Unique ID of the patient')
-    category = db.Column(db.String(50), nullable=False, index=True, comment='Age group label (e.g. "Under 5", "Adolescents")')
+    category = db.Column(db.String(50), nullable=False, index=True, comment='Age group label (e.g. "Under 5", "Early Adolescents", "Late Adolescents")')
     time_stamp = db.Column(db.DateTime, nullable=False, comment='Date the data was recorded')
 
     created_at = db.Column(db.DateTime, default=dt.utcnow)
