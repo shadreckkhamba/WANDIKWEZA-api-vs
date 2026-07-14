@@ -1,0 +1,28 @@
+app:
+  SECRET_KEY: ${FLASK_SECRET_KEY}
+  TRUST_PROXY_HEADERS: true
+
+security:
+  require_api_key: true
+  api_key: ${VIRTUAL_SERVER_API_KEY}
+  api_key_header: X-API-Key
+  enforce_https: true
+  exempt_paths:
+    - /rr/health/
+
+database:
+  db_uri: ${DATABASE_URL}
+
+virtual_server:
+  host: receiver.example.internal
+  port: 5001
+
+api_endpoints:
+  stay_times: "https://sender.example.internal/wandikweza/stay_times"
+  patient_data: "https://sender.example.internal/wandikweza/get_patient_data"
+  fetch_interval: 60
+  adaptive_intervals:
+    enabled: true
+    min_interval: 60
+    max_interval: 300
+    backoff_multiplier: 1.5
