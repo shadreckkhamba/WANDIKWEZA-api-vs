@@ -32,3 +32,12 @@ cleanup_calculated_fields.py
 production_migration.py
 metrics_sql.sql
 scripts/seed_patient_stay_times.py
+
+# SSH keys
+*.pub
+*.pem
+
+# Local config with real credentials (never commit; use *.example.yaml as template)
+config/dev_config.yaml
+config/virtual_config.yaml
+config/*.local.yaml
