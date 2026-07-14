@@ -21,7 +21,7 @@ def upgrade():
     op.create_table('patient_age_categories',
     sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('period_date', sa.DateTime(), nullable=False, comment='Date of data snapshot'),
-    sa.Column('label', sa.String(length=50), nullable=False, comment='Age group label (e.g. "Under 18")'),
+    sa.Column('label', sa.String(length=50), nullable=False, comment='Age group label (e.g. "Under 5", "Early Adolescents", "Late Adolescents")'),
     sa.Column('count', sa.Integer(), nullable=False, comment='Patient count for the age group'),
     sa.Column('created_at', sa.DateTime(), nullable=True),
     sa.Column('updated_at', sa.DateTime(), nullable=True),
